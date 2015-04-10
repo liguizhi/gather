@@ -1,0 +1,1 @@
+for /l %%i IN (1,1,4) DO start cmd /k php D:\phpStudy\WWW\gather\gather.php %%i
