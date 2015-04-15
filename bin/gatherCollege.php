@@ -1,41 +1,18 @@
 <?php
 /**
  * 特征链接：
- * 1.页面链接http://www.xuebang.com.cn/teacherId315303，url+教师id
- * 2.获取图片的链接http://www.xuebang.com.cn/showImages?fileID=28230,url+1中匹配的fileID
- * 3.图片真实链接http://www.xuebang.com.cn/images/college/teachers_thumbnails/2008/5/29/VJ_FORUM_82099.tmp
- * 4.图片存放目录md5(作者名),取前4位建目录
+ * 1.页面链接http://www.xuebang.com.cn/schoolId3249，url+学校id
+ * 2.获取图片的链接http://www.xuebang.com.cn/servlet/showImage?type=college&cid=3249,url+学校id
+ * 3.简介地址http://www.xuebang.com.cn/sIntro/3249,url+学校id
+ * 4.院系地址http://www.xuebang.com.cn/3249/deptlist
+ * 5.图片存放目录md5(学校),取前4位建目录
  * 
  */
 
-/*
- * 1、数据入库
-
-（1）采集的头像 -> 作家专题数据库中的头像字段
-（2）采集的人名 -> 作家专题数据库中的人名字段
-注意：入库时，无论是否存在同名的人物，均新增记录，而不是覆盖原记录。
-（3）采集的人名的拼音 -> 作家专题数据库中的URL拼音字段
-注意：入库时，如果存在同名的人物，则URL拼音字段后添加数字ID。
-例如：原库中，存在2个人名“刘晓波”，其URL分别是：www.kongfz.com/writer/liuxiaobo/和www.kongfz.com/writer/liuxiaobo2/，采集来的人名中包含同名人物“刘晓波”，则入库后，新记录的URL拼音字段值为：liuxiaobo{ID}，即该页面的URL为：www.kongfz.com/writer/liuxiaobo{ID}/
-
-2、数据展示
-
-将采集来的（2）人名 （3）大 学 （4）院 系 （5）省 市 （6）状 态 （7）人物简介 几个数据项的值合并，去除可能存在的HTML代码，作为 作家专题库中的 人名简介 字段值进行入库操作
-
-入库字段：
- author.authorName
- author.authorNamePinyin
- author.authorUrl
- 
- authorsDesc.image
- authorsDesc.details
-
- * 
- *  */
 require_once 'pinyin.php';
-class gatherXueBang{
-    private static $successFile='/phpStudy/WWW/gather/log/success';
-    private static $errorFile='/phpStudy/WWW/gather/log/error';
+class gatherCollege{
+    private static $successFile='/phpStudy/WWW/gather/college/log/success';
+    private static $errorFile='/phpStudy/WWW/gather/college/log/error';
     public function __construct($shard) {
         self::$successFile .= $shard.'.log';
         self::$errorFile .= $shard.'.log';
@@ -113,8 +90,7 @@ class gatherXueBang{
     public static function getHtml($url) {
         $handle = curl_init();
         $timeout = 50;
-        // $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';
-        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';
+        $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';
         $header = array('Accept-Language:zh-cn', 'Connection:Keep-Alive', 'Cache-Control:no-cache');
         curl_setopt($handle, CURLOPT_REFERER, $url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $header);
@@ -146,7 +122,6 @@ class gatherXueBang{
         $handle = curl_init();
         $timeout = 50;
         $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';
-        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';
         $header = array('Accept-Language:zh-cn', 'Connection:Keep-Alive', 'Cache-Control:no-cache');
         curl_setopt($handle, CURLOPT_REFERER, $url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $header);

@@ -1,0 +1,2 @@
+<?php
+$redis = new redisc

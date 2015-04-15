@@ -1,51 +1,53 @@
 <?php
 /**
  * 特征链接：
- * 1.页面链接http://www.xuebang.com.cn/teacherId315303，url+教师id
- * 2.获取图片的链接http://www.xuebang.com.cn/showImages?fileID=28230,url+1中匹配的fileID
- * 3.图片真实链接http://www.xuebang.com.cn/images/college/teachers_thumbnails/2008/5/29/VJ_FORUM_82099.tmp
- * 4.图片存放目录md5(作者名),取前4位建目录
+ * 1.页面链接http://www.xuebang.com.cn/schoolId3249，url+学校id
+ * 2.获取图片的链接http://www.xuebang.com.cn/servlet/showImage?type=college&cid=3249,url+学校id
+ * 3.简介地址http://www.xuebang.com.cn/sIntro/3249,url+学校id
+ * 4.院系地址http://www.xuebang.com.cn/3249/deptlist
+ * 5.图片存放目录md5(学校),取前4位建目录
  * 
  */
+use lib\HttpUtil;
 
-/*
- * 1、数据入库
-
-（1）采集的头像 -> 作家专题数据库中的头像字段
-（2）采集的人名 -> 作家专题数据库中的人名字段
-注意：入库时，无论是否存在同名的人物，均新增记录，而不是覆盖原记录。
-（3）采集的人名的拼音 -> 作家专题数据库中的URL拼音字段
-注意：入库时，如果存在同名的人物，则URL拼音字段后添加数字ID。
-例如：原库中，存在2个人名“刘晓波”，其URL分别是：www.kongfz.com/writer/liuxiaobo/和www.kongfz.com/writer/liuxiaobo2/，采集来的人名中包含同名人物“刘晓波”，则入库后，新记录的URL拼音字段值为：liuxiaobo{ID}，即该页面的URL为：www.kongfz.com/writer/liuxiaobo{ID}/
-
-2、数据展示
-
-将采集来的（2）人名 （3）大 学 （4）院 系 （5）省 市 （6）状 态 （7）人物简介 几个数据项的值合并，去除可能存在的HTML代码，作为 作家专题库中的 人名简介 字段值进行入库操作
-
-入库字段：
- author.authorName
- author.authorNamePinyin
- author.authorUrl
- 
- authorsDesc.image
- authorsDesc.details
-
- * 
- *  */
 require_once 'pinyin.php';
-class gatherXueBang{
-    private static $successFile='/phpStudy/WWW/gather/log/success';
-    private static $errorFile='/phpStudy/WWW/gather/log/error';
+class gatherCollege{
+    private static $successFile='/phpStudy/WWW/gather/college/log/success';
+    private static $errorFile='/phpStudy/WWW/gather/college/log/error';
+    private static $handle = null;
+    public static $matchConfig = array(
+        'name' => '/<H1 class=\"schoolname\">(.*)<\/H1>/',
+        'type' => '/<span class=\"zrystrong\">类型：<\/span>(.*)/',
+        'belong' => '/<span class=\"zrystrong\" style=\"margin-left: 50px;\">隶属于：<\/span>(.*)/',
+        '211' => '/211工程/',
+        '985' => '/985工程/',
+        'address' => '/<span class=\"zrystrong\">学校地址：<\/span>(.*)/',
+        'site' => '/<span class=\"zrystrong\">官方网站：<\/span><a href=\"(.*)\"/',
+        );
     public function __construct($shard) {
         self::$successFile .= $shard.'.log';
         self::$errorFile .= $shard.'.log';
     }
     public function collect($url) {
-        $content = self::getHtml($url);
-        $authorName = self::getName($content);
+        // self::$handle = curl_init();
+        $content = HttpUtil::getHtml($url);
+        $collegeName = self::getData($content,'name');//名称
+        $type = self::getData($content,'type');//类型
+        $belong = self::getData($content,'belong');//隶属
+        $get211 =  self::getData($content,'211');//是否211
+        $get985 = self::getData($content,'985');//是否985
+        $address = self::getData($content,'address');//地址
+        $site = self::getData($content,'site');//网址
+        var_dump($site);
+        // $desc = self::getData($content,'desc');//简介
+        // $province = self::getData($content,'province');//省份
+        // $city = self::getData($content,'city');//城市
+        $departList = self::getDepartList($content);//院系
+        $nature = self::getNature($content);//性质，用学校名搜索，从结果中匹配性质
+        $image = self::getImage($content);
         $flag = false;
         $imgUrl='';
-        if($authorName) {
+        if($collegeName) {
             $authorNamePinyin = pinyin($authorName);
             if($authorNamePinyin) {
                 $college = self::getCollege($content);
@@ -72,49 +74,16 @@ class gatherXueBang{
         self::writeLog($result,$flag);
     }
     
-//----------------------自定义方法-----------------------------//
-    /**
-     * 组合作者简介
-     * @param type $name
-     * @param type $college
-     * @param type $department
-     * @param type $city
-     * @param type $status
-     * @param type $desc
-     */
-    public static function getDetails($name, $college,$department,$city, $status,$desc){
-        $details = '';
-        if($name) {
-            $details .= '姓名：'.$name;
-        }
-        if($college) {
-            $details .= '；大学：'.$college;
-        }
-        if($department) {
-            $details .= '；院系：'. $department;
-        }
-        if($city) {
-            $details .= '；省市：' .$city;
-        }
-        if($status) {
-            $details .= '；状态：'.$status;
-        }
-        if($desc) {
-            $details .= '.'.$desc;
-        }
-        return $details;
-    }
-
     /**
      * 获取页面内容
      * @param type $url
      * @return type
      */
-    public static function getHtml($url) {
-        $handle = curl_init();
+    public static function getHtml($url,$handle='') {
+        if(!$handle)    $handle = curl_init();
         $timeout = 50;
-        // $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';
-        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';
+        $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';//模拟爬虫
+        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';//模拟浏览器用户
         $header = array('Accept-Language:zh-cn', 'Connection:Keep-Alive', 'Cache-Control:no-cache');
         curl_setopt($handle, CURLOPT_REFERER, $url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $header);
@@ -133,8 +102,8 @@ class gatherXueBang{
 //        var_dump($info);exit;
     //    $html = safeEncoding($html);
         $html = self::str2utf8($html);
-        curl_close($handle);
-        return $html;
+        // curl_close($handle);
+        return array('html'=>$html, 'handle'=>$handle);
     }
 
     /**
@@ -142,11 +111,11 @@ class gatherXueBang{
      * @param type $url
      * @return type
      */
-    public static function getRawHtml($url) {
-        $handle = curl_init();
+    public static function getRawHtml($url, $handle='') {
+        if(!$handle) $handle = curl_init();
         $timeout = 50;
         $useragent='Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)';
-        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';
+        $useragent='Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.94 Safari/537.36';//模拟浏览器用户
         $header = array('Accept-Language:zh-cn', 'Connection:Keep-Alive', 'Cache-Control:no-cache');
         curl_setopt($handle, CURLOPT_REFERER, $url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $header);
@@ -155,8 +124,8 @@ class gatherXueBang{
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($handle, CURLOPT_TIMEOUT, $timeout);
         $html = curl_exec($handle);
-        curl_close($handle);
-        return $html;
+        // curl_close($handle);
+        return array('html'=>$html, $handle);
     }
     /**
      * 字符转换
@@ -169,6 +138,18 @@ class gatherXueBang{
             $content = mb_convert_encoding($content,'UTF-8',array('UTF-8','ASCII','EUC-CN','CP936','BIG-5','GB2312','GBK'));
         }
         return $content;
+    }
+    /**
+     * 从内容中匹配指定格式的字段
+     */
+    public static function getData($content, $name){
+        $matchExpr = self::$matchExpr[$name];
+        pret_match("/$matchExpr/", $content, $match);
+        if(isset($match[1])) {
+            return trim($match[1]);
+        } else {
+            return '';
+        }  
     }
     /**
      * 从页面内容解析简介
@@ -184,14 +165,38 @@ class gatherXueBang{
         }
     }
     /**
-     * 从页面内容解析姓名
+     * 从页面内容名称
      * @param type $content
      * @return string
      */
     public static function getName($content) {
-        preg_match("/<font color=\"#0088cc\">(.*)<\/font>/", $content, $match);
+        preg_match("/<H1 class=\"schoolname\">(.*)<\/H1>/", $content, $match);
         if(isset($match[1])) {
-            return $match[1];
+            return trim($match[1]);
+        } else {
+            return '';
+        }    
+    }
+    /**
+     * @param type $content
+     * @return string
+     */
+    public static function getType($content) {
+        preg_match("/<span class=\"zrystrong\">类型：<\/span>(.*)/", $content, $match);
+        if(isset($match[1])) {
+            return trim($match[1]);
+        } else {
+            return '';
+        }    
+    }
+    /**
+     * @param type $content
+     * @return string
+     */
+    public static function getType($content) {
+        preg_match("/<span class=\"zrystrong\">类型：<\/span>(.*)/", $content, $match);
+        if(isset($match[1])) {
+            return trim($match[1]);
         } else {
             return '';
         }    
@@ -204,7 +209,7 @@ class gatherXueBang{
     public static function getCollege($content) {
         preg_match("/<p> 大 学：<a href=.*>(.*)<\/a><\/p>/", $content, $match);
         if(isset($match[1])) {
-            return $match[1];
+            return trim($match[1]);
         } else {
             return '';
         }   
