@@ -2,8 +2,6 @@
 /**
  * http工具类
  */
-namespace lib;
-
 class HttpUtil{
     /**
      * 获取页面内容
